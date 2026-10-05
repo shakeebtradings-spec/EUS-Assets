@@ -81,7 +81,7 @@ create trigger assets_touch before update on assets for each row execute functio
 -- Check an asset in or out atomically (one call per scan).
 create or replace function scan_asset(p_tag text, p_action text, p_store uuid default null, p_note text default null)
 returns assets language plpgsql security definer set search_path = public as $$
-declare a assets; holder text;
+declare a assets; holder text; sname text;
 begin
   if not is_active() then raise exception 'Account is disabled'; end if;
   select * into a from assets where tag = p_tag for update;
@@ -96,7 +96,12 @@ begin
     end if;
     update assets set status='checked_out', holder_id=auth.uid() where id=a.id returning * into a;
   elsif p_action = 'check_in' then
-    if a.status = 'in_store' then raise exception 'Already in store'; end if;
+    -- Already sitting in the selected store: nothing to do.
+    if a.status = 'in_store' and a.store_id = coalesce(p_store, a.store_id) then
+      select name into sname from stores where id = a.store_id;
+      raise exception 'Already in %', coalesce(sname, 'store');
+    end if;
+    -- Otherwise (returned from a person, or moved from another store): put it in the selected store.
     update assets set status='in_store', holder_id=null, store_id=coalesce(p_store, a.store_id)
       where id=a.id returning * into a;
   else
