@@ -88,28 +88,75 @@ function renderShell(keepTab) {
     <button class="sec sm" id="out" title="${esc(S.me.username)}">Sign out</button></header>
     <nav>${tabs.map(([k, l]) => `<button data-t="${k}" class="${k === S.tab ? "on" : ""}">${l}</button>`).join("")}</nav>
     <div class="wrap" id="main"></div>`;
-  $("#store").onchange = e => { S.storeId = e.target.value; localStorage.setItem("store", S.storeId); S.assets.page = 0; renderTab(); };
+  $("#store").onchange = e => { stopScanner(); S.storeId = e.target.value; localStorage.setItem("store", S.storeId); S.assets.page = 0; renderTab(); };
   $("#out").onclick = async () => { await sb.auth.signOut(); S.me = null; renderAuth(); };
   document.querySelectorAll("nav button").forEach(b => b.onclick = () => { stopScanner(); S.tab = b.dataset.t; document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b)); renderTab(); });
   renderTab();
 }
 function renderTab() { ({ scan: viewScan, assets: viewAssets, activity: viewActivity, people: viewPeople, admin: viewAdmin }[S.tab])(arguments[0]); }
 
-// ---------- scan ----------
+// ---------- scan (collect first, save only on Confirm) ----------
+const CONDITIONS = { good: "Good", damaged: "Damaged", needs_repair: "Needs repair", missing_parts: "Missing parts" };
+const loadCart = () => { try { return { check_out: [], check_in: [], ...JSON.parse(localStorage.getItem("cart") || "{}") }; } catch { return { check_out: [], check_in: [] }; } };
+S.cart = loadCart();
+const saveCart = () => { try { localStorage.setItem("cart", JSON.stringify(S.cart)); } catch { } };
+
 function viewScan(refresh) {
-  if (refresh && S.scanner) return; // don't disturb a running camera
+  if (refresh && S.scanner) { renderCart(); return; } // don't disturb a running camera
   $("#main").innerHTML = `<div class="card"><div class="seg">
-      <button data-m="check_out" class="out ${S.mode === "check_out" ? "on" : ""}">Check OUT</button>
-      <button data-m="check_in" class="in ${S.mode === "check_in" ? "on" : ""}">Check IN</button></div>
-      <p class="mut">${S.mode === "check_in" ? `Items scanned are returned to <b>${esc(storeName(S.storeId))}</b>.` : "Items scanned are taken by you."}</p>
+      <button data-m="check_out" class="out">Check OUT</button><button data-m="check_in" class="in">Check IN</button></div>
+      <p class="mut" id="hint"></p>
       <div id="reader"></div>
       <p class="row"><button id="cam">Start camera</button></p>
-      <form class="row" id="mf"><input name="c" placeholder="…or type / use a USB scanner" autocomplete="off"><button class="sec">Go</button></form></div>
-      <div id="res"></div><div class="card"><b>My items</b><div class="list" id="mine"></div></div>`;
-  document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { S.mode = b.dataset.m; viewScan(); });
+      <form class="row" id="mf"><input name="c" placeholder="…or type / use a USB scanner" autocomplete="off"><button class="sec">Add</button></form></div>
+      <div id="res"></div><div class="card" id="cart"></div>
+      <div class="card"><b>My items</b><div class="list" id="mine"></div></div>`;
+  document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { S.mode = b.dataset.m; $("#res").innerHTML = ""; renderMode(); });
   $("#cam").onclick = () => S.scanner ? stopScanner() : startScanner();
   $("#mf").onsubmit = e => { e.preventDefault(); const c = e.target.c.value.trim(); e.target.c.value = ""; if (c) handleCode(c, true); };
-  loadMine();
+  renderMode(); loadMine();
+}
+function renderMode() {
+  document.querySelectorAll("[data-m]").forEach(b => b.classList.toggle("on", b.dataset.m === S.mode));
+  $("#hint").innerHTML = S.mode === "check_in"
+    ? `Scan items to add them to the list. Nothing is saved until you press <b>Confirm</b>. They will be checked into <b>${esc(storeName(S.storeId))}</b>.`
+    : `Scan items to add them to the list. Nothing is saved until you press <b>Confirm</b>. They will be checked out to <b>you</b>.`;
+  renderCart();
+}
+function renderCart() {
+  const el = $("#cart"); if (!el) return;
+  const items = S.cart[S.mode], inn = S.mode === "check_in";
+  if (!items.length) { el.innerHTML = `<b>${inn ? "Check-in" : "Check-out"} list</b><p class="mut">Empty. Scan a barcode to add items.</p>`; return; }
+  el.innerHTML = `<b>${inn ? "Check-in to " + esc(storeName(S.storeId)) : "Check-out"} list (${items.length})</b>
+    <div class="list">${items.map((it, i) => `<div style="align-items:flex-start"><span style="flex:1"><b>${esc(it.name)}</b><br><span class="mut">${esc(it.tag)} · ${esc(it.from)}</span>
+      ${it.err ? `<br><span style="color:var(--bad)">${esc(it.err)}</span>` : ""}
+      ${inn ? `<select data-c="${i}" style="margin-top:6px">${Object.entries(CONDITIONS).map(([k, v]) => `<option value="${k}" ${it.condition === k ? "selected" : ""}>${v}</option>`).join("")}</select>` : ""}</span>
+      <button class="sec sm" data-x="${i}" aria-label="Remove">✕</button></div>`).join("")}</div>
+    <label>Note (optional)</label><input id="cnote" value="${esc(S.cartNote || "")}" placeholder="e.g. job / reason">
+    <p class="row"><button id="ok" class="${inn ? "" : "bad"}" style="${inn ? "background:var(--ok)" : "background:var(--warn);color:#000"}">Confirm ${inn ? "check-in" : "check-out"} (${items.length})</button>
+    <button class="sec" id="clr">Clear list</button></p>`;
+  el.querySelectorAll("[data-c]").forEach(sel => sel.onchange = () => { items[+sel.dataset.c].condition = sel.value; saveCart(); });
+  el.querySelectorAll("[data-x]").forEach(b => b.onclick = () => { items.splice(+b.dataset.x, 1); saveCart(); renderCart(); });
+  $("#cnote").oninput = e => S.cartNote = e.target.value;
+  $("#clr").onclick = () => { if (confirm("Clear the whole list?")) { S.cart[S.mode] = []; saveCart(); renderCart(); } };
+  $("#ok").onclick = confirmCart;
+}
+async function confirmCart() {
+  const mode = S.mode, items = S.cart[mode], btn = $("#ok"), note = (S.cartNote || "").trim() || null;
+  btn.disabled = true; btn.textContent = "Saving…";
+  let done = 0;
+  for (const it of [...items]) {
+    const { error } = await sb.rpc("scan_asset", { p_tag: it.tag, p_action: mode, p_store: S.storeId || null, p_note: note, p_condition: mode === "check_in" ? it.condition : null });
+    if (error) it.err = error.message.replace(/^NOT_FOUND: /, "");
+    else { items.splice(items.indexOf(it), 1); done++; }
+  }
+  saveCart();
+  const failed = items.length;
+  if (!failed) S.cartNote = "";
+  const res = $("#res");
+  if (res) res.innerHTML = `<div class="card result ${failed ? "err" : ""}"><b>${done} item${done === 1 ? "" : "s"} ${mode === "check_in" ? "checked in to " + esc(storeName(S.storeId)) : "checked out"}.</b>${failed ? `<br>${failed} could not be saved – see the list below.` : ""}</div>`;
+  if (done) { navigator.vibrate?.(80); beep(); }
+  renderCart(); loadMine();
 }
 async function loadMine() {
   const { data } = await sb.from("assets").select("tag,name,store_id,updated_at").eq("holder_id", S.me.id).order("updated_at", { ascending: false });
@@ -134,21 +181,28 @@ function stopScanner() {
   if (sc) sc.stop().then(() => sc.clear()).catch(() => {});
   const b = $("#cam"); if (b) b.textContent = "Start camera";
 }
+// A scan only looks the asset up and adds it to the pending list; nothing is written until Confirm.
 async function handleCode(code, manual) {
   const now = Date.now();
   if (!manual && code === S.lastScan.code && now - S.lastScan.at < 3000) return; // debounce repeat reads
   S.lastScan = { code, at: now };
-  const { data, error } = await sb.rpc("scan_asset", { p_tag: code, p_action: S.mode, p_store: S.storeId || null });
   const res = $("#res"); if (!res) return;
-  if (error) {
-    navigator.vibrate?.([200, 80, 200]);
-    const msg = error.message.replace(/^NOT_FOUND: /, "");
-    res.innerHTML = `<div class="card result err"><b>${esc(code)}</b><br>${esc(msg)}</div>`;
-    return;
-  }
-  navigator.vibrate?.(60); beep();
-  res.innerHTML = `<div class="card result"><b>${S.mode === "check_out" ? "Checked out" : "Checked in"}:</b> ${esc(data.name)}<br><span class="mut">${esc(data.tag)} · ${esc(storeName(data.store_id))}</span></div>`;
-  loadMine();
+  const mode = S.mode, list = S.cart[mode];
+  const bad = html => { navigator.vibrate?.([200, 80, 200]); res.innerHTML = `<div class="card result err">${html}</div>`; };
+  if (list.some(i => i.tag === code)) return bad(`<b>${esc(code)}</b><br>Already in the list.`);
+  const { data: a, error } = await sb.from("assets").select("tag,name,status,store_id,holder:profiles(username,full_name)").eq("tag", code).maybeSingle();
+  if (error) return bad(esc(error.message));
+  if (!a) return bad(`<b>${esc(code)}</b><br>No asset with this barcode.${isAdmin() ? ` <button class="sm" id="addnew">Add as new asset</button>` : ""}`),
+    isAdmin() && ($("#addnew").onclick = () => assetDialog({ tag: code }));
+  const who = a.holder ? a.holder.full_name || a.holder.username : "someone";
+  if (a.status === "maintenance" || a.status === "retired") return bad(`<b>${esc(a.name)}</b><br>Asset is ${STATUS[a.status].toLowerCase()} and cannot be moved.`);
+  if (mode === "check_out" && a.status === "checked_out") return bad(`<b>${esc(a.name)}</b><br>Already checked out by ${esc(who)}.`);
+  if (mode === "check_in" && a.status === "in_store" && a.store_id === S.storeId) return bad(`<b>${esc(a.name)}</b><br>Already in ${esc(storeName(S.storeId))}.`);
+  if (S.cart[mode] !== list) return; // mode switched while looking up
+  list.push({ tag: a.tag, name: a.name, condition: "good", from: a.status === "checked_out" ? `with ${who}` : storeName(a.store_id) });
+  saveCart(); navigator.vibrate?.(60); beep();
+  res.innerHTML = `<div class="card result"><b>Added:</b> ${esc(a.name)}<br><span class="mut">Press Confirm when you have scanned everything.</span></div>`;
+  renderCart();
 }
 function beep() { try { const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(); o.frequency.value = 880; o.connect(c.destination); o.start(); o.stop(c.currentTime + .1); } catch { } }
 

@@ -78,8 +78,10 @@ $$ begin new.updated_at = now(); return new; end $$;
 drop trigger if exists assets_touch on assets;
 create trigger assets_touch before update on assets for each row execute function touch_updated_at();
 
--- Check an asset in or out atomically (one call per scan).
-create or replace function scan_asset(p_tag text, p_action text, p_store uuid default null, p_note text default null)
+-- Check an asset in or out atomically. Called once per item when the user presses Confirm.
+alter table assets    add column if not exists condition text check (condition in ('good','damaged','needs_repair','missing_parts'));
+alter table movements add column if not exists condition text check (condition in ('good','damaged','needs_repair','missing_parts'));
+create or replace function scan_asset(p_tag text, p_action text, p_store uuid, p_note text, p_condition text)
 returns assets language plpgsql security definer set search_path = public as $$
 declare a assets; holder text; sname text;
 begin
@@ -96,22 +98,23 @@ begin
     end if;
     update assets set status='checked_out', holder_id=auth.uid() where id=a.id returning * into a;
   elsif p_action = 'check_in' then
-    -- Already sitting in the selected store: nothing to do.
     if a.status = 'in_store' and a.store_id = coalesce(p_store, a.store_id) then
       select name into sname from stores where id = a.store_id;
       raise exception 'Already in %', coalesce(sname, 'store');
     end if;
-    -- Otherwise (returned from a person, or moved from another store): put it in the selected store.
-    update assets set status='in_store', holder_id=null, store_id=coalesce(p_store, a.store_id)
+    update assets set status='in_store', holder_id=null, store_id=coalesce(p_store, a.store_id),
+        condition=coalesce(p_condition, a.condition)
       where id=a.id returning * into a;
   else
     raise exception 'Invalid action';
   end if;
-  insert into movements (asset_id, store_id, user_id, action, note)
-    values (a.id, coalesce(p_store, a.store_id), auth.uid(), p_action, p_note);
+  insert into movements (asset_id, store_id, user_id, action, note, condition)
+    values (a.id, coalesce(p_store, a.store_id), auth.uid(), p_action, p_note,
+            case when p_action='check_in' then p_condition end);
   return a;
 end $$;
-grant execute on function scan_asset(text,text,uuid,text) to authenticated;
+revoke execute on function scan_asset(text,text,uuid,text,text) from public, anon;
+grant execute on function scan_asset(text,text,uuid,text,text) to authenticated;
 
 -- Row level security
 alter table stores enable row level security;
@@ -149,7 +152,6 @@ end $$;
 insert into stores (name) values ('Main Store') on conflict do nothing;
 
 -- Lock down who can call helper functions
-revoke execute on function scan_asset(text,text,uuid,text) from public, anon;
 revoke execute on function handle_new_user() from public, anon, authenticated;
 revoke execute on function is_active() from public, anon;
 revoke execute on function is_admin() from public, anon;
