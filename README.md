@@ -14,7 +14,7 @@ Free, live, multi-store asset check-in/check-out for 5,000+ assets. Runs in any 
 
 1. Create a free project at <https://supabase.com>.
 2. **SQL Editor** → paste and run `supabase/schema.sql`.
-3. **Authentication → Providers → Email**: turn **OFF** "Confirm email" (this is what removes email confirmation).
+3. Email confirmation is already bypassed by a database trigger in the schema. (Optionally also turn off **Authentication → Providers → Email → Confirm email**.)
 4. **Project Settings → API**: copy the Project URL and `anon` key into `web/config.js`.
 5. Host the `web/` folder (any static host over HTTPS – required for camera access):
    - GitHub Pages: repo **Settings → Pages → Source: GitHub Actions**, merge to `main` (workflow included), or
