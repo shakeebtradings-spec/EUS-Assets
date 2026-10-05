@@ -48,7 +48,7 @@ create index if not exists movements_asset_idx on movements (asset_id, created_a
 create index if not exists movements_store_idx on movements (store_id);
 create index if not exists movements_user_idx on movements (user_id, created_at desc);
 
--- Create a profile for every new account. The very first account becomes admin.
+-- Create a profile for every new account. The first account (while no active admin exists) becomes admin.
 create or replace function handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
@@ -57,7 +57,7 @@ begin
     new.id,
     lower(coalesce(new.raw_user_meta_data->>'username', split_part(new.email,'@',1))),
     new.raw_user_meta_data->>'full_name',
-    case when exists (select 1 from profiles) then 'staff' else 'admin' end
+    case when exists (select 1 from profiles where role='admin' and active) then 'staff' else 'admin' end
   );
   return new;
 end $$;
