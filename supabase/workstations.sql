@@ -51,7 +51,8 @@ create table if not exists ws_sessions (
   reservation_id uuid references ws_reservations on delete set null,
   started_at timestamptz not null default now(),
   ended_at timestamptz,
-  ended_by text
+  ended_by text,
+  constraint ws_sessions_case_nonblank check (length(trim(case_number)) > 0)
 );
 create unique index if not exists ws_one_active_per_station on ws_sessions (station_id) where ended_at is null;
 create index if not exists ws_sessions_started_idx on ws_sessions (started_at desc);
@@ -192,9 +193,10 @@ end $$;
 
 create or replace function ws_reserve(p_station int, p_start timestamptz, p_end timestamptz, p_case text, p_desc text)
 returns ws_reservations language plpgsql security definer set search_path = public as $$
-declare st ws_stations; r ws_reservations; who text; clash timestamptz;
+declare st ws_stations; r ws_reservations; who text; clash timestamptz; c text := nullif(trim(p_case), '');
 begin
   if ws_role() not in ('user','admin') then raise exception 'You do not have permission to reserve workstations'; end if;
+  if c is null then raise exception 'Case number is required'; end if;
   if p_end <= p_start then raise exception 'End time must be after start time'; end if;
   if p_start < now() - interval '5 minutes' then raise exception 'Start time is in the past'; end if;
   if p_start > now() + interval '90 days' then raise exception 'Reservations can be made up to 90 days ahead'; end if;
@@ -215,7 +217,7 @@ begin
   end if;
 
   insert into ws_reservations (station_id, user_id, user_name, starts_at, ends_at, case_number, description)
-    values (p_station, auth.uid(), ws_my_name(), p_start, p_end, nullif(trim(p_case), ''), nullif(trim(p_desc), ''))
+    values (p_station, auth.uid(), ws_my_name(), p_start, p_end, c, nullif(trim(p_desc), ''))
     returning * into r;
   return r;
 end $$;
