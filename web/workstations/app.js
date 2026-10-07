@@ -129,6 +129,7 @@ async function refresh() {
     if (!(await loadCore())) return;
     if (S.tab === "board") drawBoard();
     else if (S.tab === "reserve") drawReserveDyn();
+    else if (S.tab === "timeline") { await loadTL(); drawTL(); }
     else if (S.tab === "history") { await loadHistory(); drawHistDyn(); }
     else if (S.tab === "admin" && !$("#view input:focus, #view textarea:focus")) { await loadAdmin(); drawAdmin(); }
   } finally { refreshing = false; if (again) { again = false; refresh(); } }
@@ -174,7 +175,7 @@ function tick() {
   const c = $("#clock"); if (c) c.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   document.querySelectorAll("[data-since]").forEach(el => { el.textContent = dur(Date.now() - new Date(el.dataset.since)); });
   const m = now.getMinutes();
-  if (m !== lastMinute) { lastMinute = m; if (S.tab === "board" && S.stations.length) drawBoard(); else if (S.tab === "reserve" && S.stations.length) drawReserveDyn(); }
+  if (m !== lastMinute) { lastMinute = m; if (S.tab === "board" && S.stations.length) drawBoard(); else if (S.tab === "reserve" && S.stations.length) drawReserveDyn(); else if (S.tab === "timeline" && S.tl?.data) drawTL(); }
 }
 
 // ---------- shell ----------
@@ -188,7 +189,7 @@ async function startApp() {
 
 function tabsFor() {
   const t = [["board", "Live board"]];
-  if (!S.anon) { t.push(["reserve", canUse() ? "Reserve" : "Schedule"], ["history", "History"]); if (isAdmin()) t.push(["admin", "Admin"]); }
+  if (!S.anon) { t.push(["reserve", canUse() ? "Reserve" : "Schedule"], ["timeline", "Timeline"], ["history", "History"]); if (isAdmin()) t.push(["admin", "Admin"]); }
   return t;
 }
 function drawChrome() {
@@ -211,6 +212,7 @@ function openTab(t) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
   if (t === "board") drawBoard();
   else if (t === "reserve") renderReserve();
+  else if (t === "timeline") renderTimeline();
   else if (t === "history") renderHistory();
   else if (t === "admin") renderAdmin();
 }
@@ -400,6 +402,67 @@ function drawReserveDyn() {
     : `<div class="empty">No upcoming reservations.</div>`;
 }
 
+// ---------- busy timeline ----------
+const MODES = { day: ["Day", 1], week: ["Week", 7], month: ["Month", 30] };
+function tlBounds() {
+  const t = S.tl, [y, m, d] = t.date.split("-").map(Number), n = MODES[t.mode][1];
+  return Array.from({ length: n + 1 }, (_, i) => new Date(y, m - 1, d - (n - 1) + i)); // range ends on the chosen day
+}
+async function loadTL() {
+  const bd = tlBounds(), a = bd[0].toISOString(), b = bd[bd.length - 1].toISOString();
+  const { data } = await sb.from("ws_sessions").select("*").lt("started_at", b).or(`ended_at.is.null,ended_at.gt.${a}`).order("started_at").limit(3000);
+  S.tl.data = data || [];
+}
+function renderTimeline() {
+  if (!S.tl) S.tl = { mode: "day", date: ymd(new Date()), data: [] };
+  const t = S.tl;
+  $("#view").innerHTML = `<section class="panel"><div class="row" style="align-items:center">
+    <div class="chips" style="margin:0">${Object.entries(MODES).map(([k, v]) => `<button data-act="tlmode" data-m="${k}" class="${t.mode === k ? "on" : ""}">${v[0]}</button>`).join("")}</div>
+    <div class="row" style="flex:0 1 auto;flex-wrap:nowrap;align-items:center"><button class="sec sm" data-act="tlstep" data-n="-1" aria-label="Earlier">‹</button>
+      <input type="date" id="tld" value="${esc(t.date)}" style="min-width:150px"><button class="sec sm" data-act="tlstep" data-n="1" aria-label="Later">›</button>
+      <button class="sec sm" data-act="tltoday">Today</button></div></div>
+    <div id="tldyn" style="margin-top:12px"></div></section>`;
+  loadTL().then(drawTL);
+}
+const sessHours = (x, a, b) => Math.max(0, Math.min(x.ended_at ? +new Date(x.ended_at) : Date.now(), b) - Math.max(+new Date(x.started_at), a)) / 36e5;
+function drawTL() {
+  const host = $("#tldyn"); if (!host || !S.tl) return;
+  const t = S.tl, bd = tlBounds(), a = +bd[0], b = +bd[bd.length - 1], days = bd.length - 1, now = Date.now(), me = S.me?.id;
+  const hrs = id => S.tl.data.filter(x => x.station_id === id).reduce((n, x) => n + sessHours(x, a, b), 0);
+  let main;
+  if (t.mode === "day") {
+    const pos = (s, e) => { const l = Math.max(0, (s - a) / (b - a) * 100), r = Math.min(100, (e - a) / (b - a) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
+    const rows = S.stations.map(st => {
+      const bars = [];
+      S.res.filter(r => r.station_id === st.id && +new Date(r.ends_at) > a && +new Date(r.starts_at) < b).forEach(r =>
+        bars.push(`<div class="bar ${r.user_id === me ? "mine" : ""}" style="${pos(+new Date(r.starts_at), +new Date(r.ends_at))}" title="Booked · ${esc(r.user_name)} ${hm(r.starts_at)}–${hm(r.ends_at)}${r.case_number ? " · " + esc(r.case_number) : ""}">${esc(r.user_name)}</div>`));
+      t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).forEach(x => {
+        const e = x.ended_at ? +new Date(x.ended_at) : now;
+        bars.push(`<div class="bar use" style="${pos(+new Date(x.started_at), e)}" title="${esc(x.user_name)} · case ${esc(x.case_number)} · ${hm(x.started_at)}–${x.ended_at ? hm(x.ended_at) : "now"}${x.description ? " · " + esc(x.description) : ""}">${esc(x.user_name)} · ${esc(x.case_number)}</div>`);
+      });
+      return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" style="cursor:default">${bars.join("")}${now >= a && now < b ? `<div class="nowline" style="left:${(now - a) / (b - a) * 100}%"></div>` : ""}</div></div>`;
+    }).join("");
+    main = `<div class="mut sm" style="margin-bottom:6px">${dayLabel(bd[0])} · hover or tap a bar for details</div>
+      <div class="tl"><div class="axis">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => `<span style="left:${h / 24 * 100}%">${pad(h % 24)}</span>`).join("")}</div>${rows}</div>
+      <div class="legend"><span><i style="background:var(--busy)"></i>Actually used</span><span><i style="background:var(--acc)"></i>Booked</span><span><i style="background:#7dd3fc"></i>Your booking</span></div>`;
+  } else {
+    const cols = bd.slice(0, -1).map((d, i) => ({ d, a: +d, b: +bd[i + 1] }));
+    const head = cols.map(c => `<div class="hd">${days <= 7 ? c.d.toLocaleDateString([], { weekday: "short" }) + "<br>" : ""}${c.d.getDate()}</div>`).join("");
+    const rows = S.stations.map(st => `<div class="hl">${esc(short(st))}</div>` + cols.map(c => {
+      const h = t.data.filter(x => x.station_id === st.id).reduce((n, x) => n + sessHours(x, c.a, c.b), 0);
+      return `<button class="hc" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 12).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
+    }).join("")).join("");
+    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 12 h+ is darkest). Tap a day to open it.</div>
+      <div class="heatwrap"><div class="heat" style="grid-template-columns:48px repeat(${days},minmax(${days > 7 ? 30 : 48}px,1fr))"><div></div>${head}${rows}</div></div>`;
+  }
+  const sum = S.stations.map(st => {
+    const h = hrs(st.id), n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, h / (days * 24) * 100);
+    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / days).toFixed(1)} h/day avg</div>
+      <div class="meter" title="${pct.toFixed(0)}% of the period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
+  }).join("");
+  host.innerHTML = `${main}<h2 style="margin:18px 0 4px;font-size:16px">How busy · ${days === 1 ? dayLabel(bd[0]) : `${bd[0].toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(b - 1).toLocaleDateString([], { day: "numeric", month: "short" })}`}</h2><div class="list">${sum}</div>`;
+}
+
 // ---------- history ----------
 function renderHistory() {
   $("#view").innerHTML = `<section class="panel"><div class="row"><div><label>Search (name, case, workstation, description)</label><input id="hq" value="${esc(S.hq)}" autocomplete="off"></div>
@@ -483,6 +546,10 @@ const actions = {
   cancelres: el => { if (confirm("Cancel this reservation?")) act("ws_cancel_reservation", { p_id: el.dataset.id }, "Reservation cancelled"); },
   closedlg: () => $("#dlg").close(),
   csv: exportCsv,
+  tlmode: el => { S.tl.mode = el.dataset.m; renderTimeline(); },
+  tlstep: el => { const [y, m, d] = S.tl.date.split("-").map(Number); S.tl.date = ymd(new Date(y, m - 1, d + MODES[S.tl.mode][1] * +el.dataset.n)); renderTimeline(); },
+  tltoday: () => { S.tl.date = ymd(new Date()); renderTimeline(); },
+  tlday: el => { S.tl.mode = "day"; S.tl.date = el.dataset.d; renderTimeline(); },
   dur: el => { const r = rfRange(); if (!r) return; const e = new Date(+r[0] + +el.dataset.m * 6e4); S.rf.end = hm(e); $('#rf [data-f="end"]').value = S.rf.end; drawReserveDyn(); },
   savest: el => {
     const p = el.closest("[data-sid]"), g = k => p.querySelector(`[data-k="${k}"]`);
@@ -509,6 +576,7 @@ document.addEventListener("click", e => {
 document.addEventListener("change", e => {
   const el = e.target;
   if (el.dataset.act === "setrole") adminWrite(sb.from("ws_members").upsert({ user_id: el.dataset.id, role: el.value, updated_at: new Date().toISOString() }), `Access set to “${ROLES[el.value]}”`);
+  if (el.id === "tld" && el.value) { S.tl.date = el.value; renderTimeline(); }
   if (el.dataset.act === "setpublic") adminWrite(sb.from("ws_settings").update({ public_display: el.checked }).eq("id", 1), el.checked ? "Public display is ON" : "Public display is OFF");
 });
 
