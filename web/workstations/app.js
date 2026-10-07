@@ -372,9 +372,13 @@ function renderReserve(stationId) {
 
 function drawReserveDyn() {
   const tl = $("#rtl"); if (!tl) return;
-  const f = S.rf, d0 = new Date(`${f.date || ymd(new Date())}T00:00`), a = +d0 + DAY_START * 36e5, b = +d0 + 864e5, now = Date.now();
-  const pos = (s, e) => { const l = Math.max(0, (s - a) / (b - a) * 100), r = Math.min(100, (e - a) / (b - a) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
+  const f = S.rf, d0 = new Date(`${f.date || ymd(new Date())}T00:00`), a = +d0 + DAY_START * 36e5, now = Date.now(), dayEnd = +d0 + 864e5;
   const pv = canUse() ? rfRange() : null;
+  const endH = winEnd(+d0, [...S.res.filter(r => +new Date(r.starts_at) < dayEnd && +new Date(r.ends_at) > +d0).map(r => Math.min(+new Date(r.ends_at), dayEnd)),
+    ...(now >= +d0 && now < dayEnd && S.sessions.length ? [now] : []), ...(pv && +pv[0] < dayEnd && +pv[1] > +d0 ? [Math.min(+pv[1], dayEnd)] : [])]);
+  S.winEnd = endH;
+  const b = +d0 + endH * 36e5;
+  const pos = (s, e) => { const l = Math.max(0, (s - a) / (b - a) * 100), r = Math.min(100, (e - a) / (b - a) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
   const me = S.me?.id;
   const rows = S.stations.map(st => {
     const ids = groupIds(st), bars = [];
@@ -388,10 +392,10 @@ function drawReserveDyn() {
     });
     if (pv && (+f.station === st.id || (+f.station !== st.id && ids.includes(+f.station) && st.kvm_group)))
       bars.push(`<div class="bar pv" style="${pos(+pv[0], +pv[1])}">${+f.station === st.id ? "your slot" : "blocked"}</div>`);
-    return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" data-st="${st.id}">${bars.join("")}${now >= a && now < b ? `<div class="nowline" style="left:${(now - a) / (b - a) * 100}%"></div>` : ""}</div></div>`;
+    return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" data-st="${st.id}">${afterHTML(endH)}${bars.join("")}${now >= a && now < b ? `<div class="nowline" style="left:${(now - a) / (b - a) * 100}%"></div>` : ""}</div></div>`;
   }).join("");
   tl.innerHTML = `<div class="mut sm" style="margin-bottom:6px">${canUse() ? "Tap a row to pick a start time. " : ""}${dayLabel(d0)}</div>
-    <div class="tl">${axisHTML()}${rows}</div>
+    <div class="tl" style="--n:${endH - DAY_START}">${axisHTML(endH)}${rows}</div>
     <div class="legend"><span><i style="background:var(--acc)"></i>Booked</span><span><i style="background:#7dd3fc"></i>Yours</span><span><i style="background:var(--busy)"></i>In use</span><span><i style="background:#a78bfa55;border:1px dashed var(--kvm)"></i>Blocked by shared KVM</span></div>`;
   const sum = $("#rsum");
   if (sum) { const r = rfRange(); sum.textContent = r ? `${dayLabel(r[0])} ${hm(r[0])} → ${+new Date(r[1].toDateString()) !== +new Date(r[0].toDateString()) ? dayLabel(r[1]) + " " : ""}${hm(r[1])} · ${dur(r[1] - r[0])}` : ""; }
@@ -404,8 +408,11 @@ function drawReserveDyn() {
 }
 
 // ---------- busy timeline ----------
-const DAY_START = 7; // work day starts at 07:00; timelines show 07:00–24:00
-const axisHTML = () => `<div class="axis">${[7, 9, 11, 13, 15, 17, 19, 21, 23].map(h => `<span style="left:${(h - DAY_START) / (24 - DAY_START) * 100}%">${pad(h)}</span>`).join("")}</div>`;
+const DAY_START = 7, WORK_END = 16; // normal day 07:00–16:00; never blocked after 16:00, timelines just stretch to fit late work
+const winEnd = (d0, ends) => ends.reduce((h, t) => { const x = (t - d0) / 36e5; return x > h ? Math.min(24, Math.ceil(x)) : h; }, WORK_END);
+const axisHTML = end => { const step = end - DAY_START <= 10 ? 1 : 2, hs = []; for (let h = DAY_START; h < end; h += step) hs.push(h);
+  return `<div class="axis">${hs.map(h => `<span style="left:${(h - DAY_START) / (end - DAY_START) * 100}%">${pad(h)}</span>`).join("")}</div>`; };
+const afterHTML = end => end > WORK_END ? `<div class="after" style="left:${(WORK_END - DAY_START) / (end - DAY_START) * 100}%" title="After 4 PM"></div>` : "";
 const isOff = d => d.getDay() === 5 || d.getDay() === 6; // work week is Sunday–Thursday; Friday & Saturday are days off
 const MODES = { day: ["Day", 1], week: ["Week", 7], month: ["Month", 30] };
 function tlBounds() {
@@ -438,35 +445,41 @@ function drawTL() {
   const hrs = id => S.tl.data.filter(x => x.station_id === id).reduce((n, x) => n + sessHours(x, a, b), 0);
   let main;
   if (t.mode === "day") {
-    const la = a + DAY_START * 36e5; // visible window starts at 07:00
-    const pos = (s, e) => { const l = Math.max(0, (s - la) / (b - la) * 100), r = Math.min(100, (e - la) / (b - la) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
+    const la = a + DAY_START * 36e5; // visible window starts at 07:00 and stretches past 16:00 only if someone worked later
+    const endH = winEnd(a, [...t.data.map(x => Math.min(x.ended_at ? +new Date(x.ended_at) : now, b)), ...S.res.filter(r => +new Date(r.starts_at) < b && +new Date(r.ends_at) > a).map(r => Math.min(+new Date(r.ends_at), b))]);
+    const wb = a + endH * 36e5;
+    const pos = (s, e) => { const l = Math.max(0, (s - la) / (wb - la) * 100), r = Math.min(100, (e - la) / (wb - la) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
     const rows = S.stations.map(st => {
       const bars = [];
-      S.res.filter(r => r.station_id === st.id && +new Date(r.ends_at) > la && +new Date(r.starts_at) < b).forEach(r =>
+      S.res.filter(r => r.station_id === st.id && +new Date(r.ends_at) > la && +new Date(r.starts_at) < wb).forEach(r =>
         bars.push(`<div class="bar ${r.user_id === me ? "mine" : ""}" style="${pos(+new Date(r.starts_at), +new Date(r.ends_at))}" title="Booked · ${esc(r.user_name)} ${hm(r.starts_at)}–${hm(r.ends_at)}${r.case_number ? " · " + esc(r.case_number) : ""}">${esc(r.user_name)}</div>`));
-      t.data.filter(x => x.station_id === st.id && sessHours(x, la, b) > 0).forEach(x => {
+      t.data.filter(x => x.station_id === st.id && sessHours(x, la, wb) > 0).forEach(x => {
         const e = x.ended_at ? +new Date(x.ended_at) : now;
         bars.push(`<div class="bar use" style="${pos(+new Date(x.started_at), e)}" title="${esc(x.user_name)} · case ${esc(x.case_number)} · ${hm(x.started_at)}–${x.ended_at ? hm(x.ended_at) : "now"}${x.description ? " · " + esc(x.description) : ""}">${esc(x.user_name)} · ${esc(x.case_number)}</div>`);
       });
-      return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" style="cursor:default">${bars.join("")}${now >= la && now < b ? `<div class="nowline" style="left:${(now - la) / (b - la) * 100}%"></div>` : ""}</div></div>`;
+      return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" style="cursor:default">${afterHTML(endH)}${bars.join("")}${now >= la && now < wb ? `<div class="nowline" style="left:${(now - la) / (wb - la) * 100}%"></div>` : ""}</div></div>`;
     }).join("");
     main = `<div class="mut sm" style="margin-bottom:6px">${dayLabel(bd[0])} · hover or tap a bar for details</div>
-      <div class="tl">${axisHTML()}${rows}</div>
+      <div class="tl" style="--n:${endH - DAY_START}">${axisHTML(endH)}${rows}</div>
       <div class="legend"><span><i style="background:var(--busy)"></i>Actually used</span><span><i style="background:var(--acc)"></i>Booked</span><span><i style="background:#7dd3fc"></i>Your booking</span></div>`;
   } else {
     const cols = bd.slice(0, -1).map((d, i) => ({ d, a: +d, b: +bd[i + 1] }));
     const head = cols.map(c => `<div class="hd ${isOff(c.d) ? "off" : ""}">${c.d.toLocaleDateString([], { weekday: days <= 7 ? "short" : "narrow" })}<br>${c.d.getDate()}</div>`).join("");
     const rows = S.stations.map(st => `<div class="hl">${esc(short(st))}</div>` + cols.map(c => {
       const h = t.data.filter(x => x.station_id === st.id).reduce((n, x) => n + sessHours(x, c.a, c.b), 0);
-      return `<button class="hc ${isOff(c.d) ? "off" : ""}" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 12).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
+      return `<button class="hc ${isOff(c.d) ? "off" : ""}" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 9).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
     }).join("")).join("");
-    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 12 h+ is darkest). Fri &amp; Sat are days off (shaded). Tap a day to open it.</div>
+    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 9 h+ is darkest). Fri &amp; Sat are days off (shaded). Tap a day to open it.</div>
       <div class="heatwrap"><div class="heat" style="grid-template-columns:48px repeat(${days},minmax(${days > 7 ? 30 : 48}px,1fr))"><div></div>${head}${rows}</div></div>`;
   }
+  const dayWin = d => [+new Date(d.getFullYear(), d.getMonth(), d.getDate(), DAY_START), +new Date(d.getFullYear(), d.getMonth(), d.getDate(), WORK_END)];
+  const winH = x => bd.slice(0, -1).reduce((n, d) => n + sessHours(x, ...dayWin(d)), 0);
+  const capacity = workdays * (WORK_END - DAY_START);
   const sum = S.stations.map(st => {
-    const h = hrs(st.id), n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, h / (workdays * 24) * 100);
-    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / workdays).toFixed(1)} h per working day</div>
-      <div class="meter" title="${pct.toFixed(0)}% of the working days in this period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
+    const w = t.data.filter(x => x.station_id === st.id).reduce((n, x) => n + winH(x), 0);
+    const h = hrs(st.id), extra = h - w, n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, w / capacity * 100);
+    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / workdays).toFixed(1)} h per working day${extra >= .05 ? ` · <b>${extra.toFixed(1)} h outside 7 AM–4 PM</b>` : ""}</div>
+      <div class="meter" title="${pct.toFixed(0)}% of working hours (7 AM–4 PM, Sun–Thu) in this period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
   }).join("");
   host.innerHTML = `${main}<h2 style="margin:18px 0 4px;font-size:16px">How busy · ${days === 1 ? dayLabel(bd[0]) : `${bd[0].toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(b - 1).toLocaleDateString([], { day: "numeric", month: "short" })}`}</h2><div class="list">${sum}</div>`;
 }
@@ -573,7 +586,7 @@ document.addEventListener("click", e => {
   // click on a timeline row picks station + start time
   const trk = e.target.closest(".trk");
   if (trk && S.rf && $("#rf")) {
-    const r = trk.getBoundingClientRect(), mins = Math.round((DAY_START * 60 + (e.clientX - r.left) / r.width * (24 - DAY_START) * 60) / 15) * 15;
+    const r = trk.getBoundingClientRect(), mins = Math.round((DAY_START * 60 + (e.clientX - r.left) / r.width * ((S.winEnd || WORK_END) - DAY_START) * 60) / 15) * 15;
     const keep = rfRange(), len = keep ? keep[1] - keep[0] : 36e5; // keep the chosen length
     S.rf.station = +trk.dataset.st; S.rf.start = `${pad(Math.min(23, Math.floor(mins / 60)))}:${pad(mins % 60)}`;
     S.rf.end = hm(new Date(+new Date(`${S.rf.date}T${S.rf.start}`) + len));
