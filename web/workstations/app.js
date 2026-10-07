@@ -319,6 +319,7 @@ function openSessionDialog({ st, sess, res }) {
 // ---------- reserve / schedule ----------
 function newRF(stationId) {
   const n = new Date(); n.setMinutes(Math.ceil(n.getMinutes() / 15) * 15, 0, 0);
+  if (n.getHours() < DAY_START) n.setHours(DAY_START, 0, 0, 0);
   const e = new Date(+n + 36e5);
   return { station: stationId || S.stations.find(s => s.enabled)?.id || 1, date: ymd(n), start: hm(n), end: hm(e), case: "", desc: "" };
 }
@@ -371,7 +372,7 @@ function renderReserve(stationId) {
 
 function drawReserveDyn() {
   const tl = $("#rtl"); if (!tl) return;
-  const f = S.rf, d0 = new Date(`${f.date || ymd(new Date())}T00:00`), a = +d0, b = a + 864e5, now = Date.now();
+  const f = S.rf, d0 = new Date(`${f.date || ymd(new Date())}T00:00`), a = +d0 + DAY_START * 36e5, b = +d0 + 864e5, now = Date.now();
   const pos = (s, e) => { const l = Math.max(0, (s - a) / (b - a) * 100), r = Math.min(100, (e - a) / (b - a) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
   const pv = canUse() ? rfRange() : null;
   const me = S.me?.id;
@@ -390,7 +391,7 @@ function drawReserveDyn() {
     return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" data-st="${st.id}">${bars.join("")}${now >= a && now < b ? `<div class="nowline" style="left:${(now - a) / (b - a) * 100}%"></div>` : ""}</div></div>`;
   }).join("");
   tl.innerHTML = `<div class="mut sm" style="margin-bottom:6px">${canUse() ? "Tap a row to pick a start time. " : ""}${dayLabel(d0)}</div>
-    <div class="tl"><div class="axis">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => `<span style="left:${h / 24 * 100}%">${pad(h % 24)}</span>`).join("")}</div>${rows}</div>
+    <div class="tl">${axisHTML()}${rows}</div>
     <div class="legend"><span><i style="background:var(--acc)"></i>Booked</span><span><i style="background:#7dd3fc"></i>Yours</span><span><i style="background:var(--busy)"></i>In use</span><span><i style="background:#a78bfa55;border:1px dashed var(--kvm)"></i>Blocked by shared KVM</span></div>`;
   const sum = $("#rsum");
   if (sum) { const r = rfRange(); sum.textContent = r ? `${dayLabel(r[0])} ${hm(r[0])} → ${+new Date(r[1].toDateString()) !== +new Date(r[0].toDateString()) ? dayLabel(r[1]) + " " : ""}${hm(r[1])} · ${dur(r[1] - r[0])}` : ""; }
@@ -403,10 +404,15 @@ function drawReserveDyn() {
 }
 
 // ---------- busy timeline ----------
+const DAY_START = 7; // work day starts at 07:00; timelines show 07:00–24:00
+const axisHTML = () => `<div class="axis">${[7, 9, 11, 13, 15, 17, 19, 21, 23].map(h => `<span style="left:${(h - DAY_START) / (24 - DAY_START) * 100}%">${pad(h)}</span>`).join("")}</div>`;
+const isOff = d => d.getDay() === 5 || d.getDay() === 6; // work week is Sunday–Thursday; Friday & Saturday are days off
 const MODES = { day: ["Day", 1], week: ["Week", 7], month: ["Month", 30] };
 function tlBounds() {
   const t = S.tl, [y, m, d] = t.date.split("-").map(Number), n = MODES[t.mode][1];
-  return Array.from({ length: n + 1 }, (_, i) => new Date(y, m - 1, d - (n - 1) + i)); // range ends on the chosen day
+  // week = the Sunday–Saturday week containing the chosen day; month = the 30 days ending on it
+  const first = t.mode === "week" ? d - new Date(y, m - 1, d).getDay() : d - (n - 1);
+  return Array.from({ length: n + 1 }, (_, i) => new Date(y, m - 1, first + i));
 }
 async function loadTL() {
   const bd = tlBounds(), a = bd[0].toISOString(), b = bd[bd.length - 1].toISOString();
@@ -428,37 +434,39 @@ const sessHours = (x, a, b) => Math.max(0, Math.min(x.ended_at ? +new Date(x.end
 function drawTL() {
   const host = $("#tldyn"); if (!host || !S.tl) return;
   const t = S.tl, bd = tlBounds(), a = +bd[0], b = +bd[bd.length - 1], days = bd.length - 1, now = Date.now(), me = S.me?.id;
+  const workdays = Math.max(1, bd.slice(0, -1).filter(d => !isOff(d)).length);
   const hrs = id => S.tl.data.filter(x => x.station_id === id).reduce((n, x) => n + sessHours(x, a, b), 0);
   let main;
   if (t.mode === "day") {
-    const pos = (s, e) => { const l = Math.max(0, (s - a) / (b - a) * 100), r = Math.min(100, (e - a) / (b - a) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
+    const la = a + DAY_START * 36e5; // visible window starts at 07:00
+    const pos = (s, e) => { const l = Math.max(0, (s - la) / (b - la) * 100), r = Math.min(100, (e - la) / (b - la) * 100); return `left:${l}%;width:${Math.max(r - l, .5)}%`; };
     const rows = S.stations.map(st => {
       const bars = [];
-      S.res.filter(r => r.station_id === st.id && +new Date(r.ends_at) > a && +new Date(r.starts_at) < b).forEach(r =>
+      S.res.filter(r => r.station_id === st.id && +new Date(r.ends_at) > la && +new Date(r.starts_at) < b).forEach(r =>
         bars.push(`<div class="bar ${r.user_id === me ? "mine" : ""}" style="${pos(+new Date(r.starts_at), +new Date(r.ends_at))}" title="Booked · ${esc(r.user_name)} ${hm(r.starts_at)}–${hm(r.ends_at)}${r.case_number ? " · " + esc(r.case_number) : ""}">${esc(r.user_name)}</div>`));
-      t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).forEach(x => {
+      t.data.filter(x => x.station_id === st.id && sessHours(x, la, b) > 0).forEach(x => {
         const e = x.ended_at ? +new Date(x.ended_at) : now;
         bars.push(`<div class="bar use" style="${pos(+new Date(x.started_at), e)}" title="${esc(x.user_name)} · case ${esc(x.case_number)} · ${hm(x.started_at)}–${x.ended_at ? hm(x.ended_at) : "now"}${x.description ? " · " + esc(x.description) : ""}">${esc(x.user_name)} · ${esc(x.case_number)}</div>`);
       });
-      return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" style="cursor:default">${bars.join("")}${now >= a && now < b ? `<div class="nowline" style="left:${(now - a) / (b - a) * 100}%"></div>` : ""}</div></div>`;
+      return `<div class="line"><div class="lab" title="${esc(st.name)}">${esc(short(st))}</div><div class="trk" style="cursor:default">${bars.join("")}${now >= la && now < b ? `<div class="nowline" style="left:${(now - la) / (b - la) * 100}%"></div>` : ""}</div></div>`;
     }).join("");
     main = `<div class="mut sm" style="margin-bottom:6px">${dayLabel(bd[0])} · hover or tap a bar for details</div>
-      <div class="tl"><div class="axis">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => `<span style="left:${h / 24 * 100}%">${pad(h % 24)}</span>`).join("")}</div>${rows}</div>
+      <div class="tl">${axisHTML()}${rows}</div>
       <div class="legend"><span><i style="background:var(--busy)"></i>Actually used</span><span><i style="background:var(--acc)"></i>Booked</span><span><i style="background:#7dd3fc"></i>Your booking</span></div>`;
   } else {
     const cols = bd.slice(0, -1).map((d, i) => ({ d, a: +d, b: +bd[i + 1] }));
-    const head = cols.map(c => `<div class="hd">${days <= 7 ? c.d.toLocaleDateString([], { weekday: "short" }) + "<br>" : ""}${c.d.getDate()}</div>`).join("");
+    const head = cols.map(c => `<div class="hd ${isOff(c.d) ? "off" : ""}">${c.d.toLocaleDateString([], { weekday: days <= 7 ? "short" : "narrow" })}<br>${c.d.getDate()}</div>`).join("");
     const rows = S.stations.map(st => `<div class="hl">${esc(short(st))}</div>` + cols.map(c => {
       const h = t.data.filter(x => x.station_id === st.id).reduce((n, x) => n + sessHours(x, c.a, c.b), 0);
-      return `<button class="hc" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 12).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
+      return `<button class="hc ${isOff(c.d) ? "off" : ""}" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 12).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
     }).join("")).join("");
-    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 12 h+ is darkest). Tap a day to open it.</div>
+    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 12 h+ is darkest). Fri &amp; Sat are days off (shaded). Tap a day to open it.</div>
       <div class="heatwrap"><div class="heat" style="grid-template-columns:48px repeat(${days},minmax(${days > 7 ? 30 : 48}px,1fr))"><div></div>${head}${rows}</div></div>`;
   }
   const sum = S.stations.map(st => {
-    const h = hrs(st.id), n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, h / (days * 24) * 100);
-    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / days).toFixed(1)} h/day avg</div>
-      <div class="meter" title="${pct.toFixed(0)}% of the period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
+    const h = hrs(st.id), n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, h / (workdays * 24) * 100);
+    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / workdays).toFixed(1)} h per working day</div>
+      <div class="meter" title="${pct.toFixed(0)}% of the working days in this period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
   }).join("");
   host.innerHTML = `${main}<h2 style="margin:18px 0 4px;font-size:16px">How busy · ${days === 1 ? dayLabel(bd[0]) : `${bd[0].toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(b - 1).toLocaleDateString([], { day: "numeric", month: "short" })}`}</h2><div class="list">${sum}</div>`;
 }
@@ -565,7 +573,7 @@ document.addEventListener("click", e => {
   // click on a timeline row picks station + start time
   const trk = e.target.closest(".trk");
   if (trk && S.rf && $("#rf")) {
-    const r = trk.getBoundingClientRect(), mins = Math.round(((e.clientX - r.left) / r.width * 1440) / 15) * 15;
+    const r = trk.getBoundingClientRect(), mins = Math.round((DAY_START * 60 + (e.clientX - r.left) / r.width * (24 - DAY_START) * 60) / 15) * 15;
     const keep = rfRange(), len = keep ? keep[1] - keep[0] : 36e5; // keep the chosen length
     S.rf.station = +trk.dataset.st; S.rf.start = `${pad(Math.min(23, Math.floor(mins / 60)))}:${pad(mins % 60)}`;
     S.rf.end = hm(new Date(+new Date(`${S.rf.date}T${S.rf.start}`) + len));

@@ -71,7 +71,7 @@ label{display:block;margin:10px 0 4px;color:var(--mut);font-size:13px}
 .tl .line{display:flex;align-items:center;gap:6px;margin:6px 0}
 .tl .lab{width:56px;flex:none;font-size:13px;font-weight:700}
 .trk{position:relative;flex:1;height:34px;background:#0a1020;border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:crosshair;
-  background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(100%/24 - 1px),#ffffff12 calc(100%/24 - 1px),#ffffff12 calc(100%/24))}
+  background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(100%/17 - 1px),#ffffff12 calc(100%/17 - 1px),#ffffff12 calc(100%/17))}
 .bar{position:absolute;top:3px;bottom:3px;border-radius:5px;background:var(--acc);color:#04202e;font-size:11px;font-weight:700;padding:0 5px;overflow:hidden;white-space:nowrap;display:flex;align-items:center;min-width:4px}
 .bar.mine{background:#7dd3fc;outline:2px solid #fff}
 .bar.via{background:repeating-linear-gradient(45deg,#a78bfa55,#a78bfa55 6px,#a78bfa22 6px,#a78bfa22 12px);color:#e9e3ff;border:1px dashed var(--kvm)}
@@ -132,3 +132,5 @@ body.tv #soonlist{display:none}
 .hc{min-height:34px;padding:0;border-radius:6px;font-size:11px;font-weight:700;color:#fff;border:1px solid var(--line);
   background:color-mix(in srgb,var(--busy) calc(var(--v)*100%),#0a1020)}
 .hc:hover{outline:2px solid var(--acc)}
+.heat .hd.off{opacity:.45}
+.hc.off{opacity:.6;border-style:dashed}
