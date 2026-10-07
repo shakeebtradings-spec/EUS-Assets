@@ -340,7 +340,7 @@ function renderReserve(stationId) {
       </div>
       <div class="chips"><span class="mut sm" style="align-self:center">Length:</span>${[30, 60, 120, 240, 480].map(m => `<button type="button" data-act="dur" data-m="${m}">${m < 60 ? m + " min" : m / 60 + " h"}</button>`).join("")}</div>
       <div class="row" style="margin-top:6px">
-        <div><label>Case number (optional)</label><input data-f="case" maxlength="60" autocomplete="off"></div>
+        <div><label>Case number *</label><input data-f="case" maxlength="60" autocomplete="off" required></div>
         <div style="flex:2 1 260px"><label>Description (optional)</label><input data-f="desc" maxlength="500" autocomplete="off"></div>
       </div>
       <p class="mut sm" id="rsum"></p>

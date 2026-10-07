@@ -33,7 +33,7 @@ Passwords cannot be reset by email; an admin can disable an account, and you can
 
 # EUS Workstations – live workstation board (`web/workstations/`)
 
-Live dashboard for the 4 workstations: who is on each one, their **case number** (required) and **description** (optional),
+Live dashboard for the 4 workstations: who is on each one, their **case number** (required, any text or number) and **description** (optional),
 plus **date/time reservations**. Same accounts, Supabase project and hosting as EUS Assets; open it at `<site>/workstations/`.
 
 - **Live board**: one card per workstation (Available / In use / Reserved / KVM in use), elapsed time, next bookings. Updates instantly on every device; works on phone, tablet, desktop and TV.
