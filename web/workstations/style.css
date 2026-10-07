@@ -132,3 +132,5 @@ body.tv #soonlist{display:none}
 .hc{min-height:34px;padding:0;border-radius:6px;font-size:11px;font-weight:700;color:#fff;border:1px solid var(--line);
   background:color-mix(in srgb,var(--busy) calc(var(--v)*100%),#0a1020)}
 .hc:hover{outline:2px solid var(--acc)}
+.heat .hd.off{opacity:.45}
+.hc.off{opacity:.6;border-style:dashed}

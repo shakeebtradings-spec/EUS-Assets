@@ -403,10 +403,13 @@ function drawReserveDyn() {
 }
 
 // ---------- busy timeline ----------
+const isOff = d => d.getDay() === 5 || d.getDay() === 6; // work week is Sunday–Thursday; Friday & Saturday are days off
 const MODES = { day: ["Day", 1], week: ["Week", 7], month: ["Month", 30] };
 function tlBounds() {
   const t = S.tl, [y, m, d] = t.date.split("-").map(Number), n = MODES[t.mode][1];
-  return Array.from({ length: n + 1 }, (_, i) => new Date(y, m - 1, d - (n - 1) + i)); // range ends on the chosen day
+  // week = the Sunday–Saturday week containing the chosen day; month = the 30 days ending on it
+  const first = t.mode === "week" ? d - new Date(y, m - 1, d).getDay() : d - (n - 1);
+  return Array.from({ length: n + 1 }, (_, i) => new Date(y, m - 1, first + i));
 }
 async function loadTL() {
   const bd = tlBounds(), a = bd[0].toISOString(), b = bd[bd.length - 1].toISOString();
@@ -428,6 +431,7 @@ const sessHours = (x, a, b) => Math.max(0, Math.min(x.ended_at ? +new Date(x.end
 function drawTL() {
   const host = $("#tldyn"); if (!host || !S.tl) return;
   const t = S.tl, bd = tlBounds(), a = +bd[0], b = +bd[bd.length - 1], days = bd.length - 1, now = Date.now(), me = S.me?.id;
+  const workdays = Math.max(1, bd.slice(0, -1).filter(d => !isOff(d)).length);
   const hrs = id => S.tl.data.filter(x => x.station_id === id).reduce((n, x) => n + sessHours(x, a, b), 0);
   let main;
   if (t.mode === "day") {
@@ -447,18 +451,18 @@ function drawTL() {
       <div class="legend"><span><i style="background:var(--busy)"></i>Actually used</span><span><i style="background:var(--acc)"></i>Booked</span><span><i style="background:#7dd3fc"></i>Your booking</span></div>`;
   } else {
     const cols = bd.slice(0, -1).map((d, i) => ({ d, a: +d, b: +bd[i + 1] }));
-    const head = cols.map(c => `<div class="hd">${days <= 7 ? c.d.toLocaleDateString([], { weekday: "short" }) + "<br>" : ""}${c.d.getDate()}</div>`).join("");
+    const head = cols.map(c => `<div class="hd ${isOff(c.d) ? "off" : ""}">${c.d.toLocaleDateString([], { weekday: days <= 7 ? "short" : "narrow" })}<br>${c.d.getDate()}</div>`).join("");
     const rows = S.stations.map(st => `<div class="hl">${esc(short(st))}</div>` + cols.map(c => {
       const h = t.data.filter(x => x.station_id === st.id).reduce((n, x) => n + sessHours(x, c.a, c.b), 0);
-      return `<button class="hc" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 12).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
+      return `<button class="hc ${isOff(c.d) ? "off" : ""}" data-act="tlday" data-d="${ymd(c.d)}" style="--v:${Math.min(1, h / 12).toFixed(2)}" title="${esc(st.name)} · ${c.d.toLocaleDateString()} · ${h.toFixed(1)} h used">${h >= .05 ? h.toFixed(h >= 10 ? 0 : 1) : ""}</button>`;
     }).join("")).join("");
-    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 12 h+ is darkest). Tap a day to open it.</div>
+    main = `<div class="mut sm" style="margin-bottom:6px">Hours used per day (darker = busier, 12 h+ is darkest). Fri &amp; Sat are days off (shaded). Tap a day to open it.</div>
       <div class="heatwrap"><div class="heat" style="grid-template-columns:48px repeat(${days},minmax(${days > 7 ? 30 : 48}px,1fr))"><div></div>${head}${rows}</div></div>`;
   }
   const sum = S.stations.map(st => {
-    const h = hrs(st.id), n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, h / (days * 24) * 100);
-    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / days).toFixed(1)} h/day avg</div>
-      <div class="meter" title="${pct.toFixed(0)}% of the period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
+    const h = hrs(st.id), n = t.data.filter(x => x.station_id === st.id && sessHours(x, a, b) > 0).length, pct = Math.min(100, h / (workdays * 24) * 100);
+    return `<div><div class="grow"><div class="t">${esc(st.name)}</div><div class="s">${n} session${n === 1 ? "" : "s"} · ${h.toFixed(1)} h used · ${(h / workdays).toFixed(1)} h per working day</div>
+      <div class="meter" title="${pct.toFixed(0)}% of the working days in this period"><i style="width:${pct}%"></i></div></div><div class="big" style="font-size:20px;color:var(--txt)">${pct.toFixed(0)}%</div></div>`;
   }).join("");
   host.innerHTML = `${main}<h2 style="margin:18px 0 4px;font-size:16px">How busy · ${days === 1 ? dayLabel(bd[0]) : `${bd[0].toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(b - 1).toLocaleDateString([], { day: "numeric", month: "short" })}`}</h2><div class="list">${sum}</div>`;
 }

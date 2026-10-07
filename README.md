@@ -41,7 +41,7 @@ plus **date/time reservations**. Same accounts, Supabase project and hosting as 
 - **Reserve**: pick workstation, date, from/until (or tap a row on the day timeline). Overlapping bookings are rejected by the database.
 - **Roles** (set by an admin): *No access* (new sign-ups start here) · *Viewer* (watch) · *User* (start work, reserve, edit/cancel own) · *Admin* (everything: roles, rename/disable workstations, release or cancel anyone's). The EUS Assets admin is always a workstation admin.
 - **Wall display**: `?tv` (or the *Display mode* button) gives a big-text, fullscreen, screen-awake board. Admins can optionally allow a read-only **no-login** display (*Admin → Wall display*).
-- **Timeline** tab: a day view of who used each workstation and when (plus bookings), and week / month heatmaps with hours used, sessions and % busy per workstation. Tap a day in the heatmap to open it.
+- **Timeline** tab: a day view of who used each workstation and when (plus bookings), and week / month heatmaps with hours used, sessions and % busy per workstation. Work week is Sunday–Thursday: weeks run Sun–Sat, Fri/Sat are shaded as days off, and averages / % busy count working days only. Tap a day in the heatmap to open it.
 - **History** with search and CSV export (admin).
 
 Setup: run `supabase/workstations.sql` in the SQL Editor (after `schema.sql`). No other config – it reuses `web/config.js`.
