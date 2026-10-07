@@ -58,8 +58,8 @@ create index if not exists ws_sessions_started_idx on ws_sessions (started_at de
 
 insert into ws_stations (id, name, kvm_group, hdmi_ports, notes) values
   (1, 'Workstation 1', null,    null, null),
-  (2, 'Workstation 2', 'KVM-A', 3,    null),   -- 2 and 3 share one KVM switch (3 HDMI ports): only one can be used at a time
-  (3, 'Workstation 3', 'KVM-A', 3,    null),
+  (2, 'Workstation 2', null,    3,    null),   -- own KVM switch, 3 HDMI ports (set kvm_group on two stations only if they share one switch)
+  (3, 'Workstation 3', null,    3,    null),   -- own KVM switch, 3 HDMI ports
   (4, 'Workstation 4', null,    null, null)
 on conflict do nothing;
 

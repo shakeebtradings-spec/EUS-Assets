@@ -242,7 +242,7 @@ function cardHTML(st) {
   const pill = { free: "Available", busy: "In use", reserved: "Reserved", kvm: "KVM in use", off: "Disabled" }[k];
   const tags = st.kvm_group
     ? `<span class="tag kvm">KVM switch${st.hdmi_ports ? ` · ${st.hdmi_ports}× HDMI` : ""} · shared with ${peers.map(short).map(esc).join(", ")}</span>`
-    : `<span class="tag">Single device</span>`;
+    : st.hdmi_ports ? `<span class="tag kvm">Own KVM switch · ${st.hdmi_ports}× HDMI</span>` : `<span class="tag">Single device</span>`;
   let body = "";
   if (k === "busy") {
     const s = sx.sess;
@@ -454,8 +454,8 @@ function drawAdmin() {
   <h2 style="margin:18px 2px 10px;font-size:17px">Workstations</h2>
   <div class="sgrid">${S.stations.map(st => `<section class="panel" data-sid="${st.id}"><b>#${st.id}</b>
     <label>Name</label><input data-k="name" value="${esc(st.name)}" maxlength="40">
-    <label>KVM group (same text on stations that share one KVM; blank = single device)</label><input data-k="kvm_group" value="${esc(st.kvm_group || "")}" maxlength="20">
-    <label>HDMI ports used (optional)</label><input data-k="hdmi_ports" type="number" min="0" max="16" value="${st.hdmi_ports ?? ""}">
+    <label>Shared-KVM group (only if stations share ONE switch, so they can't run together; blank = independent)</label><input data-k="kvm_group" value="${esc(st.kvm_group || "")}" maxlength="20">
+    <label>HDMI ports on its KVM switch (blank = no KVM)</label><input data-k="hdmi_ports" type="number" min="0" max="16" value="${st.hdmi_ports ?? ""}">
     <label>Notes (optional)</label><input data-k="notes" value="${esc(st.notes || "")}" maxlength="120">
     <label class="chk"><input type="checkbox" data-k="enabled" ${st.enabled ? "checked" : ""}> Enabled</label>
     <p><button class="sm" data-act="savest" data-id="${st.id}">Save</button></p></section>`).join("")}</div>`;

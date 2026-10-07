@@ -37,8 +37,8 @@ Live dashboard for the 4 workstations: who is on each one, their **case number**
 plus **date/time reservations**. Same accounts, Supabase project and hosting as EUS Assets; open it at `<site>/workstations/`.
 
 - **Live board**: one card per workstation (Available / In use / Reserved / KVM in use), elapsed time, next bookings. Updates instantly on every device; works on phone, tablet, desktop and TV.
-- **KVM rule**: workstations **2 and 3 share one KVM switch (3× HDMI)**, so only one of them can be in use or reserved at any time – the other shows "KVM in use". WS 1 and 4 are independent. (Change this under *Admin → Workstations → KVM group*.)
-- **Reserve**: pick workstation, date, from/until (or tap a row on the day timeline). Overlaps – including through the shared KVM – are rejected by the database.
+- **KVM**: workstations **2 and 3 each have their own KVM switch with 3× HDMI** and are shown as such; all four workstations are independent. If two stations ever share one switch, give them the same *Shared-KVM group* under *Admin → Workstations* and the app will only allow one of them at a time.
+- **Reserve**: pick workstation, date, from/until (or tap a row on the day timeline). Overlapping bookings are rejected by the database.
 - **Roles** (set by an admin): *No access* (new sign-ups start here) · *Viewer* (watch) · *User* (start work, reserve, edit/cancel own) · *Admin* (everything: roles, rename/disable workstations, release or cancel anyone's). The EUS Assets admin is always a workstation admin.
 - **Wall display**: `?tv` (or the *Display mode* button) gives a big-text, fullscreen, screen-awake board. Admins can optionally allow a read-only **no-login** display (*Admin → Wall display*).
 - **History** with search and CSV export (admin).
