@@ -1,4 +1,4 @@
-const CACHE = "eus-ws-v1";
+const CACHE = "eus-ws-v2";
 const SHELL = ["./", "index.html", "app.js", "style.css", "manifest.json", "icon.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", e => e.waitUntil(
@@ -11,4 +11,12 @@ self.addEventListener("fetch", e => {
     if (r.ok) { const c = r.clone(); caches.open(CACHE).then(ch => ch.put(e.request, c)); }
     return r;
   }).catch(() => caches.match(e.request)));
+});
+
+// Tapping a notification brings the app to the front.
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUninstalled: true }).then(cs => {
+    const c = cs.find(x => "focus" in x); return c ? c.focus() : self.clients.openWindow("./");
+  }));
 });

@@ -44,4 +44,12 @@ plus **date/time reservations**. Same accounts, Supabase project and hosting as 
 - **Timeline** tab: a day view of who used each workstation and when (plus bookings), and week / month heatmaps with hours used, sessions and % busy per workstation. Work day is 07:00–16:00 and stays open afterwards (nothing is blocked after 4 PM): timelines show 07:00–16:00 and stretch automatically when someone works later, with the after-4 area shaded. Work week is Sunday–Thursday: weeks run Sun–Sat, Fri/Sat are shaded as days off, and averages / % busy count working days and 7 AM–4 PM only (extra hours are listed separately). Tap a day in the heatmap to open it.
 - **History** with search and CSV export (admin).
 
-Setup: run `supabase/workstations.sql` in the SQL Editor (after `schema.sql`). No other config – it reuses `web/config.js`.
+- **Maintenance blocks** (admin): block a workstation for repairs/updates on chosen times; nobody can start or book it meanwhile, and the board, schedule and timeline show it.
+- **Change a booking**: extend, shorten or move to another workstation/time (own bookings; admins can change anyone's). Conflicts and maintenance are checked by the database.
+- **Auto-release of forgotten sessions**: after N hours (Admin → Forgotten sessions, default 10, 0 = off) a session nobody finished is released automatically (a database job runs every 10 minutes). Two hours before, the person sees "Still working?" and can confirm to keep it.
+- **My activity**: my hours this month / this week, upcoming bookings (change/cancel) and past sessions.
+- **Alerts**: in-app banners plus browser notifications (bell icon) for "booking starts / ends soon", "your booking has started", "tell me when a workstation is free" and "still working?". They work while the app is open (browser tab or installed app).
+- **Light / dark theme** switch and an **Install app** button (Android/desktop; on iPhone: Share → Add to Home Screen).
+- **Audit log** (admin only): access changes, settings, workstation edits, maintenance, and who booked / changed / cancelled / released what.
+
+Setup: run `supabase/workstations.sql`, then `supabase/workstations_v2.sql`, in the SQL Editor (after `schema.sql`). No other config – it reuses `web/config.js`.
