@@ -10,6 +10,15 @@ Free, live, multi-store asset check-in/check-out for 5,000+ assets. Runs in any 
 - **Audit trail**: who took/returned what, where, and when. **User directory** with items held.
 - Admin: add/edit assets, print barcode labels, CSV import/export (thousands of rows), manage stores & users.
 
+## Works offline
+The app is **offline-first**: after the first sign-in it opens, scans and records check-outs/check-ins with **no signal**.
+- The whole app (scanner and barcode libraries included, in `web/vendor/`) is cached on the device.
+- A full copy of the asset list is stored on the device (IndexedDB) and kept up to date with live changes; scans look items up locally.
+- Confirmed changes made offline are queued on the device and sent automatically when the connection returns, in order, with their original time. Each carries a unique id, so a retry can never be applied twice.
+- If the server rejects a queued change (e.g. someone else took the item meanwhile) it stays under **Sync issues** on the Scan tab with the reason; the local copy is corrected.
+- Needs a connection: first sign-in on a device, creating accounts, and admin edits (assets, stores, users, CSV import).
+- Reminder: another device's offline changes appear only after it reconnects; until then two people could scan the same item and the first to sync wins.
+
 ## Setup (~10 minutes, all free)
 
 1. Create a free project at <https://supabase.com>.

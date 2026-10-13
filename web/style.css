@@ -31,3 +31,5 @@ dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);bord
 dialog::backdrop{background:#0009}
 label{display:block;margin:8px 0 3px;color:var(--mut);font-size:13px}
 .live{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block}.live.on{background:var(--ok)}
+.banner{padding:8px 12px;font-size:14px;background:#1e3a5f;color:#bfdbfe;text-align:center}
+.banner.off{background:#7c2d12;color:#fed7aa}.banner.busy{background:#1e3a5f}

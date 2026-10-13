@@ -78,14 +78,21 @@ $$ begin new.updated_at = now(); return new; end $$;
 drop trigger if exists assets_touch on assets;
 create trigger assets_touch before update on assets for each row execute function touch_updated_at();
 
--- Check an asset in or out atomically. Called once per item when the user presses Confirm.
+-- Check an asset in or out atomically. Called once per item when the user presses Confirm (or when an offline queue syncs).
 alter table assets    add column if not exists condition text check (condition in ('good','damaged','needs_repair','missing_parts'));
 alter table movements add column if not exists condition text check (condition in ('good','damaged','needs_repair','missing_parts'));
-create or replace function scan_asset(p_tag text, p_action text, p_store uuid, p_note text, p_condition text)
+alter table movements add column if not exists op_id uuid;
+create unique index if not exists movements_op_id_key on movements (op_id) where op_id is not null;
+create or replace function scan_asset(p_tag text, p_action text, p_store uuid, p_note text, p_condition text, p_op_id uuid, p_at timestamptz)
 returns assets language plpgsql security definer set search_path = public as $$
 declare a assets; holder text; sname text;
 begin
   if not is_active() then raise exception 'Account is disabled'; end if;
+  -- Idempotent replay: an offline action that already reached the server is not applied twice.
+  if p_op_id is not null and exists (select 1 from movements where op_id = p_op_id) then
+    select * into a from assets where id = (select asset_id from movements where op_id = p_op_id);
+    return a;
+  end if;
   select * into a from assets where tag = p_tag for update;
   if not found then raise exception 'NOT_FOUND: no asset with barcode %', p_tag; end if;
   if a.status in ('maintenance','retired') then
@@ -108,13 +115,14 @@ begin
   else
     raise exception 'Invalid action';
   end if;
-  insert into movements (asset_id, store_id, user_id, action, note, condition)
+  insert into movements (asset_id, store_id, user_id, action, note, condition, op_id, created_at)
     values (a.id, coalesce(p_store, a.store_id), auth.uid(), p_action, p_note,
-            case when p_action='check_in' then p_condition end);
+            case when p_action='check_in' then p_condition end, p_op_id,
+            least(coalesce(p_at, now()), now()));
   return a;
 end $$;
-revoke execute on function scan_asset(text,text,uuid,text,text) from public, anon;
-grant execute on function scan_asset(text,text,uuid,text,text) to authenticated;
+revoke execute on function scan_asset(text,text,uuid,text,text,uuid,timestamptz) from public, anon;
+grant execute on function scan_asset(text,text,uuid,text,text,uuid,timestamptz) to authenticated;
 
 -- Row level security
 alter table stores enable row level security;
