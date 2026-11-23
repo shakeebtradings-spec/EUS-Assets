@@ -1,0 +1,8 @@
+.env
+data/
+*.pem
+__pycache__/
+.pytest_cache/
+node_modules/
+frontend/dist/
+.agents/

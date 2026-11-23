@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS runs</title>
+<style>
+  body{margin:0;background:#0a0f16;color:#cfe6f7;font:14px ui-monospace,monospace}
+  header{padding:12px 20px;border-bottom:1px solid #1d2a38;display:flex;gap:16px;align-items:center}
+  header a{color:#5ca7d6;margin-left:auto}
+  main{display:grid;grid-template-columns:minmax(280px,380px) 1fr;height:calc(100vh - 50px)}
+  #list{overflow:auto;border-right:1px solid #1d2a38}
+  .run{padding:10px 16px;border-bottom:1px solid #141e29;cursor:pointer}.run:hover,.run.sel{background:#101b27}
+  .st{font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-right:8px}
+  .succeeded{color:#6ee7b7}.failed,.timed_out{color:#ff8a80}.running{color:#fbbf24}.queued,.cancelled{color:#8a97a6}
+  #detail{overflow:auto;padding:16px 24px}.ev{margin:6px 0;white-space:pre-wrap;word-break:break-word}
+  .k{color:#5ca7d6;margin-right:8px}form{padding:10px 16px;display:flex;gap:6px}
+  input,button{background:#0b1522;border:1px solid #1d3a56;color:#d8f1ff;padding:7px 10px;border-radius:6px;font:inherit}
+  input{flex:1;min-width:0}
+</style></head>
+<body><header><b>JARVIS</b> runs <a href="/">orb</a></header>
+<main><div><form id="f"><input id="p" placeholder="new run prompt"><input id="c" placeholder="cwd (optional)" style="max-width:110px"><button>Run</button></form>
+<div id="list"></div></div><div id="detail">Select a run.</div></main>
+<script type="module" src="/src/dashboard/dashboard.ts"></script></body></html>
