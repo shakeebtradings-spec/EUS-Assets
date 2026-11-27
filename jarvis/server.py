@@ -12,21 +12,10 @@ import preflight
 import run_store
 import tts
 from brain import Brain, BrainError
-from data_paths import ROOT
+from data_paths import ROOT, load_env
 from run_executor import RunExecutor
 from speech import SpeechScheduler
 from web_auth import WebBoundary
-
-
-def load_env(path: Path | None = None) -> None:
-    f = path or Path(os.environ.get("JARVIS_ENV_FILE") or ROOT / ".env")
-    if not f.exists():
-        return
-    for ln in f.read_text().splitlines():
-        ln = ln.strip()
-        if ln and not ln.startswith("#") and "=" in ln:
-            k, v = ln.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 
 class RunHub:

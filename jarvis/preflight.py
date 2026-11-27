@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from data_paths import ROOT
+from data_paths import ROOT, load_env
 
 
 def _check(name: str, ok: bool, detail: str) -> dict:
@@ -57,5 +57,6 @@ def run_all() -> list[dict]:
 
 
 if __name__ == "__main__":
+    load_env()
     for c in run_all():
         print(("OK  " if c["ok"] else "FAIL"), c["name"], "-", c["detail"])

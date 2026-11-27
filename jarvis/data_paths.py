@@ -30,3 +30,15 @@ def ensure_tool_token() -> str:
         with os.fdopen(fd, "w") as fh:
             fh.write(secrets.token_urlsafe(32))
     return f.read_text().strip()
+
+
+def load_env(path: Path | None = None) -> None:
+    """Load KEY=VALUE lines from .env into os.environ (real env vars win)."""
+    f = path or Path(os.environ.get("JARVIS_ENV_FILE") or ROOT / ".env")
+    if not f.exists():
+        return
+    for ln in f.read_text(encoding="utf-8-sig").splitlines():
+        ln = ln.strip()
+        if ln and not ln.startswith("#") and "=" in ln:
+            k, v = ln.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
