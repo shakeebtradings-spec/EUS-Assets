@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import jarvis_memory
 import preflight
@@ -171,6 +172,9 @@ def create_app(brain: Brain | None = None, executor: RunExecutor | None = None) 
         if not f.exists():
             raise HTTPException(404, "frontend not built: cd frontend && npm run build (or use Vite on :5173)")
         return FileResponse(f)
+
+    if (dist / "index.html").exists():  # one-port mode (phone / production): serve the built UI
+        app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
 
     return app
 

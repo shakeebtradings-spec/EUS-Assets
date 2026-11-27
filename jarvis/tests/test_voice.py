@@ -80,3 +80,32 @@ def test_mcp_protocol():
     names = {t["name"] for t in jarvis_mcp.handle({"id": 2, "method": "tools/list"})["result"]["tools"]}
     assert {"start_run", "remember"} <= names
     assert jarvis_mcp.handle({"method": "notifications/initialized"}) is None
+
+
+def test_brain_argv_tools_and_connectors(monkeypatch):
+    monkeypatch.delenv("JARVIS_USE_CONNECTORS", raising=False)
+    monkeypatch.delenv("JARVIS_EXTRA_TOOLS", raising=False)
+    a = Brain().build_argv()
+    tools = a[a.index("--allowedTools") + 1].split(",")
+    assert {"WebSearch", "WebFetch", "Read", "mcp__jarvis"} <= set(tools)
+    assert "Bash" not in tools and "Write" not in tools and "--strict-mcp-config" in a
+    monkeypatch.setenv("JARVIS_USE_CONNECTORS", "1")
+    monkeypatch.setenv("JARVIS_EXTRA_TOOLS", "mcp__x__read, mcp__y")
+    a = Brain().build_argv()
+    assert "--strict-mcp-config" not in a
+    assert {"mcp__x__read", "mcp__y"} <= set(a[a.index("--allowedTools") + 1].split(","))
+
+
+def test_server_serves_built_ui(tmp_path, monkeypatch):
+    import server
+    from starlette.testclient import TestClient
+    (server.ROOT / "frontend" / "dist").mkdir(parents=True, exist_ok=True)
+    made = not (server.ROOT / "frontend" / "dist" / "index.html").exists()
+    if made:
+        (server.ROOT / "frontend" / "dist" / "index.html").write_text("<title>JARVIS</title>")
+    try:
+        c = TestClient(server.build(), base_url="http://localhost:8340")
+        assert "JARVIS" in c.get("/").text and c.get("/api/health").json() == {"ok": True}
+    finally:
+        if made:
+            (server.ROOT / "frontend" / "dist" / "index.html").unlink()

@@ -43,3 +43,26 @@ change is a DB write **before** it is a notification.
 `dialog.py`, `notifier.py`, `usage_store.py`, `screen.py`, `browser.py`/`repo_read.py`,
 `project_maker.py`, weather, and the settings endpoints. The core voice loop,
 run pipeline, tool channel, memory and dashboard are in place.
+
+## Abilities
+The brain can search the web (`WebSearch`/`WebFetch`) and read files (`Read`/`Glob`/`Grep`
+under `JARVIS_FILES_DIR`, default your home folder). It cannot write files or run shell
+commands itself - that goes through a *run*. Page, file and email text is treated as data,
+never as instructions.
+
+### Calendar and email
+Uses your **claude.ai connectors**, so there is no OAuth code in JARVIS:
+1. claude.ai > Settings > Connectors: connect Gmail / Google Calendar (or Outlook / Microsoft 365).
+2. Log in with `claude` on this PC with the same account, then run `claude mcp list` to see the connector names.
+3. In `.env`: `JARVIS_USE_CONNECTORS=1` and `JARVIS_EXTRA_TOOLS=` the **read-only** tool names
+   (a name prefix such as `mcp__<connector>` allows all its tools - prefer listing read/search tools only).
+4. Restart the backend. Leave send/delete tools off unless you really want voice-sent email.
+
+## iPhone (via Tailscale)
+1. Install Tailscale on the PC and the iPhone, same account. Enable HTTPS in the Tailscale admin console (DNS page).
+2. `cd frontend && npm run build` (JARVIS then serves the UI itself on port 8340).
+3. `python server.py --host 127.0.0.1`
+4. `tailscale serve --bg https+insecure://localhost:8340` - prints `https://<pc>.<tailnet>.ts.net`.
+5. In `.env`: `JARVIS_ALLOWED_ORIGINS=https://<pc>.<tailnet>.ts.net`, then restart the backend.
+6. On the iPhone open that address in Safari, tap to enable audio, allow the microphone. Add to Home Screen if you like.
+The PC must stay awake and running. Do **not** use `tailscale funnel` (public internet): anyone reaching the page controls JARVIS.
