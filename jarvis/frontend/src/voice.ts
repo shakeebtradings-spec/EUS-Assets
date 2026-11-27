@@ -10,6 +10,7 @@ export class Voice {
   private buf = new Uint8Array(256);
   speaking = false;
   onFinal: (text: string) => void = () => {};
+  onStatus: (msg: string) => void = () => {};
   onSpeakingChange: (speaking: boolean) => void = () => {};
   supported = !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
@@ -22,17 +23,27 @@ export class Voice {
 
   private listen() {
     const C = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!C) return;
+    if (!C) { this.onStatus('This browser has no speech recognition. Use Chrome.'); return; }
     const r: SR = (this.rec = new C());
     r.continuous = true; r.interimResults = false; r.lang = 'en-GB';
     r.onresult = (e: any) => {
+      this.onStatus('');
       if (this.speaking) return; // ignore our own voice coming back through the mic
       const res = e.results[e.results.length - 1];
       const text = res[0].transcript.trim();
       if (res.isFinal && text) this.onFinal(text);
     };
     r.onend = () => setTimeout(() => this.listen(), 300); // Chrome ends sessions on silence
-    r.onerror = () => {};
+    r.onerror = (e: any) => {
+      const why: Record<string, string> = {
+        'not-allowed': 'Microphone blocked. Click the lock icon in the address bar, allow Microphone, then reload.',
+        'service-not-allowed': 'Microphone blocked. Click the lock icon in the address bar, allow Microphone, then reload.',
+        'audio-capture': 'No microphone found. Check Windows Settings > Privacy > Microphone and your default input device.',
+        'network': 'Chrome speech recognition needs internet access (it uses Google servers).',
+      };
+      if (e.error !== 'no-speech' && e.error !== 'aborted') this.onStatus(why[e.error] ?? `Speech error: ${e.error}`);
+    };
+    r.onstart = () => this.onStatus('');
     try { r.start(); } catch { /* already started */ }
   }
 

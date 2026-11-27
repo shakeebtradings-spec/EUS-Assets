@@ -20,6 +20,7 @@ function connect() {
     if (e.data instanceof ArrayBuffer) return voice.enqueue(e.data);
     const m = JSON.parse(e.data);
     if (m.type === 'state') { serverState = m.state; render(); }
+    else if (m.type === 'transcript' && m.role === 'user') $('heard').textContent = `You: ${m.text}`;
     else if (m.type === 'transcript' && m.role === 'jarvis') $('line').textContent = m.text;
     else if (m.type === 'error') $('err').textContent = m.message;
   };
@@ -34,6 +35,7 @@ function send(text: string) {
 }
 
 voice.onFinal = send;
+voice.onStatus = (msg) => { $('mic').textContent = msg; };
 voice.onSpeakingChange = render;
 $('start').addEventListener('click', async () => { $('start').remove(); await voice.enable(); render(); });
 $<HTMLFormElement>('f').addEventListener('submit', (e) => {
