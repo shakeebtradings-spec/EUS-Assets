@@ -66,3 +66,8 @@ Uses your **claude.ai connectors**, so there is no OAuth code in JARVIS:
 5. In `.env`: `JARVIS_ALLOWED_ORIGINS=https://<pc>.<tailnet>.ts.net`, then restart the backend.
 6. On the iPhone open that address in Safari, tap to enable audio, allow the microphone. Add to Home Screen if you like.
 The PC must stay awake and running. Do **not** use `tailscale funnel` (public internet): anyone reaching the page controls JARVIS.
+
+## Windows one-click start
+Double-click `start-jarvis.bat`. It builds the UI on first run, starts the server and opens
+Chrome at https://localhost:8340 (first visit: Advanced > Proceed past the certificate warning).
+After updating the code, delete `frontend\dist` so it rebuilds.
