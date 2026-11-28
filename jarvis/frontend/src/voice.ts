@@ -19,21 +19,32 @@ export class Voice {
     this.analyser.connect(this.ctx.destination);
   }
 
-  async enable() { await this.ctx.resume(); this.listen(); }
+  private wanted = false;
+  private starting = false;
+  onHearing: (text: string) => void = () => {};
 
+  async enable() { await this.ctx.resume(); this.wanted = true; this.listen(); }
+
+  /** One utterance per recognition session, restarted automatically: far more
+   *  reliable in Chrome than continuous mode, which silently dies. */
   private listen() {
     const C = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!C) { this.onStatus('This browser has no speech recognition. Use Chrome.'); return; }
+    if (!this.wanted || this.speaking || this.starting) return;
+    this.starting = true;
     const r: SR = (this.rec = new C());
-    r.continuous = true; r.interimResults = false; r.lang = 'en-GB';
+    r.continuous = false; r.interimResults = true; r.lang = 'en-GB'; r.maxAlternatives = 1;
+    let fatal = false;
+    r.onstart = () => { this.starting = false; this.onStatus(''); this.onHearing('Listening...'); };
     r.onresult = (e: any) => {
-      this.onStatus('');
-      if (this.speaking) return; // ignore our own voice coming back through the mic
-      const res = e.results[e.results.length - 1];
-      const text = res[0].transcript.trim();
-      if (res.isFinal && text) this.onFinal(text);
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else interim += t;
+      }
+      if (interim) this.onHearing('Hearing: ' + interim);
+      if (final.trim() && !this.speaking) { this.onHearing('Heard: ' + final.trim()); this.onFinal(final.trim()); }
     };
-    r.onend = () => setTimeout(() => this.listen(), 300); // Chrome ends sessions on silence
     r.onerror = (e: any) => {
       const why: Record<string, string> = {
         'not-allowed': 'Microphone blocked. Click the lock icon in the address bar, allow Microphone, then reload.',
@@ -41,10 +52,14 @@ export class Voice {
         'audio-capture': 'No microphone found. Check Windows Settings > Privacy > Microphone and your default input device.',
         'network': 'Chrome speech recognition needs internet access (it uses Google servers).',
       };
-      if (e.error !== 'no-speech' && e.error !== 'aborted') this.onStatus(why[e.error] ?? `Speech error: ${e.error}`);
+      if (why[e.error]) { this.onStatus(why[e.error]); if (e.error !== 'network' && e.error !== 'audio-capture') fatal = true; }
+      else if (e.error !== 'no-speech' && e.error !== 'aborted') this.onStatus(`Speech error: ${e.error}`);
     };
-    r.onstart = () => this.onStatus('');
-    try { r.start(); } catch { /* already started */ }
+    r.onend = () => {
+      this.starting = false;
+      if (this.wanted && !fatal) setTimeout(() => this.listen(), 250);
+    };
+    try { r.start(); } catch { this.starting = false; setTimeout(() => this.listen(), 500); }
   }
 
   /** Current output loudness 0..1. */
@@ -60,7 +75,12 @@ export class Voice {
   stop() { this.queue = []; this.setSpeaking(false); }
 
   private setSpeaking(v: boolean) {
-    if (this.speaking !== v) { this.speaking = v; this.onSpeakingChange(v); }
+    if (this.speaking !== v) {
+      this.speaking = v;
+      if (v) { try { this.rec?.abort(); } catch { /* not running */ } }
+      else setTimeout(() => this.listen(), 400);
+      this.onSpeakingChange(v);
+    }
   }
 
   private async pump() {

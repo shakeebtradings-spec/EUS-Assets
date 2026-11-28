@@ -36,6 +36,7 @@ function send(text: string) {
 
 voice.onFinal = send;
 voice.onStatus = (msg) => { $('mic').textContent = msg; };
+voice.onHearing = (t) => { $('heard').textContent = t; };
 voice.onSpeakingChange = render;
 $('start').addEventListener('click', async () => { $('start').remove(); await voice.enable(); render(); });
 $<HTMLFormElement>('f').addEventListener('submit', (e) => {
