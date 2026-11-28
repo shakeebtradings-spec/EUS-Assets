@@ -52,8 +52,18 @@ def accessibility() -> dict:
         return _check("accessibility", False, str(e))
 
 
+def brain_tools() -> dict:
+    from brain import Brain
+    a = Brain(autostart=False).build_argv()
+    tools = a[a.index("--allowedTools") + 1].split(",")
+    conn = "--strict-mcp-config" not in a
+    extra = [t for t in tools if t.startswith("mcp__") and t != "mcp__jarvis"]
+    ok = conn == bool(extra) or not extra
+    return _check("brain_tools", ok, f"connectors={'on' if conn else 'off'}; extra tools: {', '.join(extra) or 'none'}")
+
+
 def run_all() -> list[dict]:
-    return [claude_cli(), fish_key(), anthropic_key_leftover(), certs(), accessibility()]
+    return [claude_cli(), fish_key(), anthropic_key_leftover(), certs(), accessibility(), brain_tools()]
 
 
 if __name__ == "__main__":

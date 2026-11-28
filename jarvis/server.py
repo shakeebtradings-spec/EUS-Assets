@@ -140,6 +140,9 @@ def create_app(brain: Brain | None = None, executor: RunExecutor | None = None) 
                 async for chunk in brain.ask(text):
                     await ws.send_json({"type": "transcript", "role": "jarvis", "text": chunk})
                     sched.say(chunk)
+                if brain.last_denials:
+                    await ws.send_json({"type": "error", "message": "Blocked tools (add these names to JARVIS_EXTRA_TOOLS in .env): "
+                                        + ", ".join(sorted(set(brain.last_denials)))})
                 await sched.drain()
             except BrainError as e:
                 await ws.send_json({"type": "error", "message": str(e)})

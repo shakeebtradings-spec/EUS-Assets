@@ -40,6 +40,7 @@ class Brain:
         self._argv = argv  # tests inject a fake
         self._proc: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
+        self.last_denials: list[str] = []
 
     def build_argv(self) -> list[str]:
         claude = os.environ.get("JARVIS_CLAUDE_BIN") or shutil.which("claude") or "claude"
@@ -75,6 +76,7 @@ class Brain:
         """Yield each text block of the reply as it arrives."""
         async with self._lock:
             proc = await self._ensure()
+            self.last_denials = []
             msg = {"type": "user", "message": {"role": "user", "content": text}}
             try:
                 proc.stdin.write((json.dumps(msg) + "\n").encode())
@@ -96,6 +98,7 @@ class Brain:
                             if b.get("type") == "text" and b.get("text", "").strip():
                                 yield b["text"]
                     elif ev.get("type") == "result":
+                        self.last_denials = [d.get("tool_name", "?") for d in ev.get("permission_denials") or []]
                         if ev.get("is_error"):
                             raise BrainError(str(ev.get("result") or "brain error"))
                         return
